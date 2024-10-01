@@ -1,83 +1,82 @@
 setwd("/Users/share_xy/Desktop/Learning Materials/ESP-Assignments")
 a <- scan("4300-0.txt", what="character", skip=73, nlines=32858-73, 
           fileEncoding="UTF-8")
-a <- gsub("_(","",a,fixed=TRUE) ## remove "_("
+a <- gsub("_(","",a,fixed=TRUE) # remove "_("
+
+## write a function to separate punctuation from words in text
 split_punct <- function(text){
-  p <- a[grep("[,.;!:?]", a)] ## return all words containing a punctuation mark
-  words <- gsub("[,.;!:?]", "", p) ## get words without punctuation
-  p <- gsub("[^,.;!:?]", "", p) ##retain the punctuation in the original word
-  pwords <- paste(words, p) ## forming word and punctuation combinations
-  a[grep("[,.;!:?]", a)] <- pwords ## reinsert the word and punctuation into a
-  a <- strsplit(a, " ") ## split words by space and return a list
-  a <- unlist(a, use.names = FALSE) ## Flatten the list to a vector
-  a <- a[!(a %in% "")] #remove empty strings
+  p <- a[grep("[,.;!:?]", a)] # return words with punctuation 
+  words <- gsub("[,.;!:?]", "", p) # remove punctuation from words
+  p <- gsub("[^,.;!:?]", "", p) # retain only punctuation
+  pwords <- paste(words, p) # recombine words with punctuation(with spaces)
+  a[grep("[,.;!:?]", a)] <- pwords # replace original ones with word-punctuation forms
+  a <- strsplit(a, " ") # split words by spaces to separate punctuation
+  a <- unlist(a) # flatten into a vector
+  a <- a[!(a %in% "")] # remove empty strings
 }
+a <- split_punct(a) # apply split_punct to text
 
-a <- split_punct(a)
-a
+## select the most frenquent words from text
+lowa <- tolower(a) # convert text to lowercase
+uniq_a <- unique(lowa) # create a unique word list
+m_uniq <- match(lowa, uniq_a) # map each word in 'lowa' to its index in 'uniq_a'
+tabul_uniq <- tabulate(m_uniq) # tabulate the frequency of each unique word
 
-lowa <- tolower(a)
-uniq_a <- unique(lowa)
-uniq_a
-m_uniq <- match(lowa, uniq_a)
-m_uniq
-tabul_uniq <- tabulate(m_uniq)
+count <- table(lowa) # create a frequency table
+count <- count[order(count,decreasing = TRUE)] # sort it in decreasing order
+b <- names(count)[1:1000] # select the top 1000 most frenquent words
 
-count <- table(lowa)
-count <- count[order(count,decreasing = TRUE)]
-b <- names(count)[1:1000]
-#参数设置
-mlag= 5
-generated_num = 100
+## set parameters for Markov chain text generation
+mlag <- 6  # number of previous words to consider(Markov lag)
+generated_num <- 100 # number of words to generate
 
-#生成matrix
-M <- matrix(NA, nrow = length(a) - mlag, ncol = mlag + 1)
-index <- match(lowa,b)
-index
-M <- t(sapply(1:(length(index) - mlag), function(i) index[i:(i + mlag)]))
-## 把前面这个向量依次切片，生成一个向量，再转置
-## M矩阵是单词的索引值（1-1000或NA)构成的矩阵
+## make the matrices of common word token sequences
+M <- matrix(NA, nrow = length(a) - mlag, ncol = mlag + 1) # initialize an empty matrix M
+index <- match(lowa,b) # map each word in 'lowa' to its index in 'b'
+M <- t(sapply(1:(length(index) - mlag), function(i) index[i:(i + mlag)])) # create a transposed matrix M with overlapping sequences of 'index' of length mlag + 1
+M <- M[!is.na(M[,1]),] # remove rows with NA in column 1
 
-#初始化
-generated_text = NULL
-initial_row <- sample(which(!is.na(M[,1])), 1) ## 随机选择第一列不是NA的索引
-generated_text[1] <- b[M[initial_row, 1]]  #随机选择一个索引1-1000的单词作为初始单词cd
 
-for (i in 2:generated_num) {
-  # 标记是否生成了下一个单词
-  word_generated <- FALSE
-  
-  # 从最高阶逐步退回到低阶
-  for (j in mlag:1) {
-    if (i > j) {  # 跳过滞后过长的情况
-      # 提取前 j 个单词的索引
-      prev_word_indices <- match(generated_text[(i-j):(i-1)], b)
+## generate random text
+generated_text <- "he" # start with the word "he"
+
+for (i in 2:generated_num ) {
+  word_generated <- FALSE # tract whether a word has been generated
+  # iterate from higher-order Markov models to lower-order ones
+  for (j in mlag:1) { 
+    # skip lags that are too long
+    if (i > j) {  
+      prev_word_indices <- match(generated_text[(i-j):(i-1)], b) # extract the index of the first j words
+      # find rows in M that match the previous word sequence
+      matching_rows <- M
+      for (k in 1:j) {
+        matching_rows <- matching_rows[matching_rows[,k] %in% prev_word_indices[k],] # narrow down matching rows
+        matching_rows <- matrix(matching_rows,ncol = ncol(M)) # retain matrix structure
+      }
+      matching_rows <- matching_rows[!is.na(matching_rows[,j+1]),]  # retain rows where the next word is non-NA
+      matching_rows <- matrix(matching_rows,ncol = ncol(M)) # retain matrix structure
       
-      # 在矩阵 M 中查找匹配的行
-      matching_rows <- which(apply(M[, 1:j, drop = FALSE], 1, function(x) all(x == prev_word_indices)))
-      
-      # 如果找到匹配的行，从中随机选择下一个单词
+      # if matching rows are found, randomly select the next word from them
       if (length(matching_rows) > 0) {
-        next_word_index <- sample(M[matching_rows, j + 1], 1)
-        
-        # 检查是否有非 NA 值
+        next_word_index <- sample(matching_rows[, j + 1], 1)
+        # check for non-NA values
         if (!is.na(next_word_index)) {
           generated_text[i] <- b[next_word_index]
           word_generated <- TRUE
-          break  # 成功生成单词，退出 j 循环
+          print(j) # debugging output to track the order of Markov chain
+          break  # exit the loop once a word is generated
         }
       }
     }
   }
-  # 如果所有阶都没有成功生成单词，随机选择一个非 NA 单词
+  # if no matching sequence is found, randomly select a word from M
   if (!word_generated) {
-    non_na_indices <- which(!is.na(M[, 1]))
-    random_row <- sample(non_na_indices, 1)
+    random_row <- sample(M[,1], 1)
+    print("rm") # debugging output indicating random word selection
     generated_text[i] <- b[M[random_row, 1]]
   }
 }
+sentence <- paste(generated_text, collapse = " ") # combine the generated words into a sentence
+sentence <- gsub(" ([,.!?;:])", "\\1", sentence) # removing extra spaces before punctuation
+print(sentence) # print the generated sentence
 
-sentence <- paste(generated_text, collapse = " ")
-# 去除标点符号前的空格，例如 " , " 替换为 ","
-sentence <- gsub(" ([,.!?;:])", "\\1", sentence)
-print(sentence)
