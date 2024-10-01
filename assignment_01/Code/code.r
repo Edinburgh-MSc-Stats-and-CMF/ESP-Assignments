@@ -43,7 +43,7 @@ generated_text = NULL
 initial_row <- sample(which(!is.na(M[,1])), 1) ## 随机选择第一列不是NA的索引
 generated_text[1] <- b[M[initial_row, 1]]  #随机选择一个索引1-1000的单词作为初始单词cd
 
-for (i in 2:generated_num ) {
+for (i in 2:generated_num) {
   # 标记是否生成了下一个单词
   word_generated <- FALSE
   
