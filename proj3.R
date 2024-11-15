@@ -3,7 +3,12 @@
 lmm <- function(form, dat, ref = list()) {
   # 使用 LMMsetup 初始化矩阵和其他参数
   # Calculate the number of unique combinations for each random effect group based on variables
-
+  if (length(ref) == 0) {
+    lm_model <- lm(form, data = dat)
+    beta_out <- coef(lm_model)
+    names(beta_out) <- names(coef(lm_model))
+    return(list(beta = beta_out, theta = NULL))
+  }
   # Initialize model matrices and parameters using LMMsetup
   setup <- LMMsetup(form, dat, ref)
   # 定义初始 theta 参数，其中第一个元素为 log(sigma)，其余为随机效应的 log 标准差
@@ -17,7 +22,7 @@ lmm <- function(form, dat, ref = list()) {
   beta <- compute_beta(theta_opt$par, setup)
   # Return estimated beta coefficients and transformed theta parameters
   beta_out <- as.vector(beta$beta_hat)
-  names(beta_out) <- c("Intercept",sapply(ref, function(x) paste(x, collapse = ":")))
+  names(beta_out) <- c("Residual",sapply(ref, function(x) paste(x, collapse = ":")))
 
   theta_out <- exp(theta_opt$par)
   names(theta_out) <- c("Intercept",sapply(ref, function(x) paste(x, collapse = ":")))
@@ -124,7 +129,8 @@ compute_beta<- function(theta,setup,L = NULL){
   }
   
   #创建完整的混合矩阵
-  theta_sigma_i <- chol2inv(L)
+  L_inv<-backsolve(L,diag(ncol(L)))
+  theta_sigma_i <- (L_inv) %*% t(L_inv)
   sigma <- diag(rep(exp(theta[1])^(-2),n-p)) 
   #创建空矩阵
   mix_matrix <- matrix(0, nrow = n, ncol = n)
@@ -139,10 +145,13 @@ compute_beta<- function(theta,setup,L = NULL){
   mix_L <- chol(mix_matrix)
   mix_L_qtx <- mix_L %*% qtx
   mix_L_qty <- mix_L %*% qty
-  beta_hat<-  chol2inv(chol(t(mix_L_qtx) %*% mix_L_qtx)) %*% t(mix_L_qtx) %*% mix_L_qty
+  L_XTWX <- chol(t(mix_L_qtx) %*% mix_L_qtx)
+  L_XTWX_inv <- backsolve(L_XTWX,diag(ncol(L_XTWX))) 
+  beta_hat<-  L_XTWX_inv %*% t(L_XTWX_inv) %*% t(mix_L_qtx) %*% mix_L_qty
   
   return(list(beta_hat = beta_hat, mix_L = mix_L))
 }
+
 
 generate_psi <- function(theta, group_sizes) {
   # 提取每个随机效应组的方差，排除第一个元素
@@ -161,6 +170,8 @@ generate_psi <- function(theta, group_sizes) {
 
 library(nlme)
 library(lme4)
-lmm(score ~ Machine,Machines,list("Worker",c("Worker","Machine")))
+lmm(score ~ Machine,Machines,list(c("Worker"),c("Worker","Machine")))
 lmer(score ~ Machine + (1|Worker) + (1|Worker:Machine),data=Machines,
      REML=FALSE)
+lmm(score ~ Machine,Machines)
+
